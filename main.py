@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime
 
 app = FastAPI()
 
@@ -217,7 +218,13 @@ questions = {
 
 class AnswerRequest(BaseModel):
     answer: str
-
+    question_id: int = Field( ..., description="The ID of the question." ) 
+    user_id: int = Field( ..., description="The ID of the user." ) 
+    time_to_answer_seconds: int = Field( ..., ge=0, description="Time taken to answer the question in seconds." ) 
+    answered_at: datetime = Field( ..., description="The date and time the question was answered." ) 
+    hint_used: bool = Field( ..., description="Whether the user used a hint." ) 
+    answered_correctly: bool = Field( ..., description="Whether the user answered correctly." ) 
+    solution_viewed: bool = Field( ..., description="Whether the user viewed the solution." )
 
 @app.get("/questions/{question_id}")
 def get_question(question_id: int):
@@ -229,21 +236,16 @@ def get_question(question_id: int):
     # Don't send the correct answer
     return {
         "id": question["id"],
-        "question": question["question"]
+        "question": question["question"],
+        "answer": question["answer"]
     }
 
 
-@app.post("/questions/{question_id}/answer")
-def submit_answer(question_id: int, request: AnswerRequest):
-    question = questions.get(question_id)
+@app.post("/questions/answer")
+def submit_answer(request: AnswerRequest):
+    question = questions.get(request.question_id)
 
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    correct = request.answer == question["answer"]
-
-    return {
-        "question_id": question_id,
-        "correct": correct,
-        "correct_answer": question["answer"] if not correct else None
-    }
+    return {}
