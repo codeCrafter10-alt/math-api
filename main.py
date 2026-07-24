@@ -27,7 +27,6 @@ class AnswerRequest(BaseModel):
     question_id: int = Field( ..., description="The ID of the question." ) 
     user_id: int = Field( ..., description="The ID of the user." ) 
     time_to_answer_seconds: int = Field( ..., ge=0, description="Time taken to answer the question in seconds." ) 
-    answered_at: datetime = Field( ..., description="The date and time the question was answered." ) 
     hint_used: bool = Field( ..., description="Whether the user used a hint." ) 
     answered_correctly: bool = Field( ..., description="Whether the user answered correctly." ) 
     solution_viewed: bool = Field( ..., description="Whether the user viewed the solution." )

@@ -3,5 +3,5 @@ redis
 types-redis
 uvicorn
 pydantic
-firebase
+firebase_admin
 python-dotenv
