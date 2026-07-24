@@ -3,3 +3,5 @@ redis
 types-redis
 uvicorn
 pydantic
+firebase
+python-dotenv
