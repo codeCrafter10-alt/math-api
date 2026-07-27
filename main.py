@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
-from datetime import datetime
+from datetime import datetime, timezone
 import firebase_admin
 from firebase_admin import credentials, firestore
 import sys
@@ -20,15 +20,12 @@ app.add_middleware(
 )
 
 
-
-
 class AnswerRequest(BaseModel):
     answer: str
     question_id: int = Field( ..., description="The ID of the question." ) 
     user_id: int = Field( ..., description="The ID of the user." ) 
     time_to_answer_seconds: int = Field( ..., ge=0, description="Time taken to answer the question in seconds." ) 
     hint_used: bool = Field( ..., description="Whether the user used a hint." ) 
-    answered_correctly: bool = Field( ..., description="Whether the user answered correctly." ) 
     solution_viewed: bool = Field( ..., description="Whether the user viewed the solution." )
 
 @app.get("/questions/{question_id}")
@@ -40,8 +37,7 @@ def get_question(question_id: int):
 
     return {
         "id": question["id"],
-        "question": question["question"],
-        "answer": question["answer"]
+        "question": question["question"]
     }
 
 
@@ -52,4 +48,17 @@ def submit_answer(request: AnswerRequest):
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    return {}
+    data = dict(request)
+    correct = request.answer.strip().lower() == question["answer"].strip().lower()
+    data.update({
+        "question": db.collection("questions").document(str(request.question_id)),
+        "answered_correctly": correct,
+        "answered_at": datetime.now(timezone.utc)
+    })
+    reference = db.collection("userData").document(str(request.user_id)).collection("data").document()
+    reference.set(data)
+
+    return {
+        "correct": correct,
+        "answer": question["answer"].strip().lower()
+    }
