@@ -62,3 +62,23 @@ def submit_answer(request: AnswerRequest):
         "correct": correct,
         "answer": question["answer"].strip().lower()
     }
+
+@app.get("/users/{user_id}/summary")
+def get_user_statistics(user_id: int):
+    reference = db.collection("userData").document(str(user_id)).collection("data")
+    user_data = reference.stream()
+
+    total_questions = 0
+    correct_answers = 0
+
+    for doc in user_data:
+        total_questions += 1
+        if doc.to_dict().get("answered_correctly"):
+            correct_answers += 1
+
+    return {
+        "user_id": user_id,
+        "total_questions_answered": total_questions,
+        "correct_answers": correct_answers,
+        "accuracy_percentage": (correct_answers / total_questions * 100) if total_questions > 0 else 0
+    }
