@@ -41,7 +41,7 @@ def get_question(question_id: int):
     }
 
 
-@app.post("/questions/answer")
+@app.post("/questions/check_answer")
 def submit_answer(request: AnswerRequest):
     question = db.collection("questions").document(str(request.question_id)).get().to_dict()
 
@@ -59,8 +59,7 @@ def submit_answer(request: AnswerRequest):
     reference.set(data)
 
     return {
-        "correct": correct,
-        "answer": question["answer"].strip().lower()
+        "correct": correct
     }
 
 @app.get("/users/{user_id}/summary")
@@ -82,3 +81,12 @@ def get_user_statistics(user_id: int):
         "correct_answers": correct_answers,
         "accuracy_percentage": (correct_answers / total_questions * 100) if total_questions > 0 else 0
     }
+
+@app.get("/questions/{question_id}/answer")
+def get_answer(question_id: int):
+    question = db.collection("questions").document(str(question_id)).get().to_dict()
+
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    return {"answer": question["answer"]}
