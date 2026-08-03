@@ -90,3 +90,7 @@ def get_answer(question_id: int):
         raise HTTPException(status_code=404, detail="Question not found")
 
     return {"answer": question["answer"]}
+
+@app.get("/test/{id}")
+def test(id: int):
+    return {"id": id, "msg": "Test passed"}
