@@ -37,7 +37,9 @@ def get_question(question_id: int):
 
     return {
         "id": question["id"],
-        "question": question["question"]
+        "question": question["question"],
+        "level": question["level"],
+        "topic": question["topic"]
     }
 
 
@@ -89,7 +91,10 @@ def get_answer(question_id: int):
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    return {"answer": question["answer"]}
+    return {
+        "answer": question["answer"],
+        "solution": question["solution"],
+    }
 
 @app.get("/test/{id}")
 def test(id: int):
