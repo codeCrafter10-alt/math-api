@@ -23,7 +23,7 @@ app.add_middleware(
 class AnswerRequest(BaseModel):
     answer: str
     question_id: int = Field( ..., description="The ID of the question." ) 
-    user_id: int = Field( ..., description="The ID of the user." ) 
+    user_id: str = Field( ..., description="The ID of the user." ) 
     time_to_answer_seconds: int = Field( ..., ge=0, description="Time taken to answer the question in seconds." ) 
     hint_used: bool = Field( ..., description="Whether the user used a hint." ) 
     solution_viewed: bool = Field( ..., description="Whether the user viewed the solution." )
