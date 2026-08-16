@@ -65,7 +65,7 @@ def submit_answer(request: AnswerRequest):
     }
 
 @app.get("/users/{user_id}/summary")
-def get_user_statistics(user_id: int):
+def get_user_statistics(user_id: str):
     reference = db.collection("userData").document(str(user_id)).collection("data")
     user_data = reference.stream()
 
