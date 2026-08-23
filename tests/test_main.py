@@ -44,7 +44,14 @@ def test_get_question_success(monkeypatch):
 
     monkeypatch.setattr(main, "db", mock_db)
 
-    response = client.get("/questions/1")
+    # Mock the question ID prediction
+    monkeypatch.setattr(
+        main,
+        "get_question_id",
+        lambda user_id: {"question_id": 1}
+    )
+
+    response = client.get("/questions/user_123")
 
     assert response.status_code == 200
     assert response.json() == {
@@ -54,8 +61,11 @@ def test_get_question_success(monkeypatch):
         "topic": "Prealgebra",
     }
 
+    main.get_question_id("user_123")
+
     mock_db.collection.assert_called_with("questions")
     mock_db.collection.return_value.document.assert_called_with("1")
+
 
 def test_get_question_not_found(monkeypatch):
     mock_db = MagicMock()
@@ -67,7 +77,13 @@ def test_get_question_not_found(monkeypatch):
 
     monkeypatch.setattr(main, "db", mock_db)
 
-    response = client.get("/questions/5")
+    monkeypatch.setattr(
+        main,
+        "get_question_id",
+        lambda user_id: {"question_id": 5}
+    )
+
+    response = client.get("/questions/user_123")
 
     assert response.status_code == 404
     assert response.json() == {
@@ -75,11 +91,30 @@ def test_get_question_not_found(monkeypatch):
     }
 
 
-def test_get_question_invalid_id():
-    response = client.get("/questions/not-an-integer")
+def test_get_question_uses_user_id(monkeypatch):
+    mock_db = MagicMock()
 
-    assert response.status_code == 422
+    mock_doc = MagicMock()
+    mock_doc.get.return_value.to_dict.return_value = mockQuestion()
 
+    mock_db.collection.return_value.document.return_value = mock_doc
+
+    monkeypatch.setattr(main, "db", mock_db)
+
+    captured_user_id = {}
+
+    def mock_get_question_id(user_id):
+        captured_user_id["user_id"] = user_id
+        return {"question_id": 123}
+
+    monkeypatch.setattr(main, "get_question_id", mock_get_question_id)
+
+    response = client.get("/questions/user_123")
+
+    assert response.status_code == 200
+    assert captured_user_id["user_id"] == "user_123"
+
+    mock_db.collection.return_value.document.assert_called_with("123")
 
 # test check_answer post endpoint
 def answer_response():
