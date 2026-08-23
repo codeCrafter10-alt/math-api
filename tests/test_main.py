@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 import main
 import pytest
 from unittest.mock import MagicMock
+from firebase_admin import firestore
 
 client = TestClient(main.app)
 
@@ -125,6 +126,10 @@ def answer_response():
         "time_to_answer_seconds": 10,
         "hint_used": False,
         "solution_viewed": False,
+        "email": "bob@example.com",
+        "first_name": "Bob",
+        "last_name": "Smith",
+        "grade": 10
     }
 
 
@@ -142,8 +147,20 @@ def test_submit_answer_correct(monkeypatch):
     data_collection = MagicMock()
     data_collection.document.return_value = new_data_doc
 
+    summary_doc = MagicMock()
+
+    summary_collection = MagicMock()
+    summary_collection.document.return_value = summary_doc
+
     user_document = MagicMock()
-    user_document.collection.return_value = data_collection
+    def user_collection_side_effect(name):
+        if name == "data":
+            return data_collection
+        elif name == "summary":
+            return summary_collection
+
+        return MagicMock()
+    user_document.collection.side_effect = user_collection_side_effect
 
     user_data_collection = MagicMock()
     user_data_collection.document.return_value = user_document
@@ -171,7 +188,6 @@ def test_submit_answer_correct(monkeypatch):
     }
 
     new_data_doc.set.assert_called_once()
-
     saved_data = new_data_doc.set.call_args[0][0]
 
     assert saved_data["answer"] == "349"
@@ -180,8 +196,26 @@ def test_submit_answer_correct(monkeypatch):
     assert saved_data["time_to_answer_seconds"] == 10
     assert saved_data["hint_used"] is False
     assert saved_data["solution_viewed"] is False
+    assert saved_data["email"] == "bob@example.com"
     assert saved_data["answered_correctly"] is True
+    assert saved_data["first_name"] == "Bob"
+    assert saved_data["last_name"] == "Smith"
+    assert saved_data["grade"] == 10
     assert isinstance(saved_data["answered_at"], datetime)
+
+    summary_doc.update.assert_called_once()
+
+    summary_data = summary_doc.update.call_args[0][0]
+
+
+    assert summary_data["email"] == "bob@example.com"
+    assert summary_data["problems_attempted"] == firestore.Increment(1)
+    assert summary_data["problems_correct"] == firestore.Increment(1)
+    assert summary_data["streak"] == firestore.Increment(1)
+
+    summary_doc.update.assert_called_once_with(
+        summary_data
+    )
     
 
 def test_submit_answer_incorrect(monkeypatch):
@@ -200,8 +234,20 @@ def test_submit_answer_incorrect(monkeypatch):
     data_collection = MagicMock()
     data_collection.document.return_value = new_data_doc
 
+    summary_doc = MagicMock()
+
+    summary_collection = MagicMock()
+    summary_collection.document.return_value = summary_doc
+
     user_document = MagicMock()
-    user_document.collection.return_value = data_collection
+    def user_collection_side_effect(name):
+        if name == "data":
+            return data_collection
+        elif name == "summary":
+            return summary_collection
+
+        return MagicMock()
+    user_document.collection.side_effect = user_collection_side_effect
 
     user_data_collection = MagicMock()
     user_data_collection.document.return_value = user_document
@@ -257,6 +303,18 @@ def test_submit_answer_question_not_found(monkeypatch):
     assert response.json() == {
         "detail": "Question not found"
     }
+
+
+def test_answer_request_missing_email():
+    payload = answer_response()
+    del payload["email"]
+
+    response = client.post(
+        "/questions/check_answer",
+        json=payload,
+    )
+
+    assert response.status_code == 422
 
 def test_answer_request_missing_fields():
     response = client.post(

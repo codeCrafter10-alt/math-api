@@ -29,6 +29,10 @@ class AnswerRequest(BaseModel):
     time_to_answer_seconds: int = Field( ..., ge=0, description="Time taken to answer the question in seconds." ) 
     hint_used: bool = Field( ..., description="Whether the user used a hint." ) 
     solution_viewed: bool = Field( ..., description="Whether the user viewed the solution." )
+    email: str = Field( ..., description="The email of the user." )
+    first_name: str = Field( ..., description="The first name of the user." )
+    last_name: str = Field( ..., description="The last name of the user." )
+    grade: int = Field( ..., ge=1, le=12, description="The grade of the user." )
 
 @app.get("/questions/{user_id}")
 def get_question(user_id: str):
@@ -62,6 +66,28 @@ def submit_answer(request: AnswerRequest):
     })
     reference = db.collection("userData").document(str(request.user_id)).collection("data").document()
     reference.set(data)
+
+    reference = db.collection("userData").document(str(request.user_id)).collection("summary").document("1")
+    if not reference.get().exists:
+        reference.set({
+            "email": request.email,
+            "problems_attempted": 0,
+            "problems_correct": 0,
+            "streak": 0,
+            "first_name": request.first_name,
+            "last_name": request.last_name,
+            "grade": request.grade
+        })
+    else:
+        reference.update({
+            "email": request.email,
+            "problems_attempted": firestore.Increment(1),
+            "problems_correct": (firestore.Increment(1) if correct else firestore.Increment(0)),
+            "streak": (firestore.Increment(1) if correct else 0),
+            "first_name": request.first_name,
+            "last_name": request.last_name,
+            "grade": request.grade
+        })
 
     return {
         "correct": correct
