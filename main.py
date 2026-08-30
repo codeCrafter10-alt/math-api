@@ -36,7 +36,7 @@ class AnswerRequest(BaseModel):
 
 @app.get("/questions/{user_id}")
 def get_question(user_id: str):
-    question_id = get_question_id(user_id)["question_id"]
+    question_id = random.randint(1, 5000)
     question = db.collection("questions").document(str(question_id)).get().to_dict()
 
     if not question:
@@ -128,13 +128,3 @@ def get_answer(question_id: int):
 @app.get("/test/{id}")
 def test(id: int):
     return {"id": id, "msg": "Test passed"}
-
-@app.get("/get_question_id/{user_id}")
-def get_question_id(user_id: str):
-    # Model predicts question id based on user performance.
-
-    question_id = random.randint(1, 5000) # Random question id model
-
-    return {
-        "question_id": question_id
-    }
