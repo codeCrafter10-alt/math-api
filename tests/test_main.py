@@ -91,11 +91,7 @@ def answer_response():
         "user_id": "user_123",
         "time_to_answer_seconds": 10,
         "hint_used": False,
-        "solution_viewed": False,
-        "email": "bob@example.com",
-        "first_name": "Bob",
-        "last_name": "Smith",
-        "grade": 10
+        "solution_viewed": False
     }
 
 
@@ -162,11 +158,7 @@ def test_submit_answer_correct(monkeypatch):
     assert saved_data["time_to_answer_seconds"] == 10
     assert saved_data["hint_used"] is False
     assert saved_data["solution_viewed"] is False
-    assert saved_data["email"] == "bob@example.com"
     assert saved_data["answered_correctly"] is True
-    assert saved_data["first_name"] == "Bob"
-    assert saved_data["last_name"] == "Smith"
-    assert saved_data["grade"] == 10
     assert isinstance(saved_data["answered_at"], datetime)
 
     summary_doc.update.assert_called_once()
@@ -174,7 +166,6 @@ def test_submit_answer_correct(monkeypatch):
     summary_data = summary_doc.update.call_args[0][0]
 
 
-    assert summary_data["email"] == "bob@example.com"
     assert summary_data["problems_attempted"] == firestore.Increment(1)
     assert summary_data["problems_correct"] == firestore.Increment(1)
     assert summary_data["streak"] == firestore.Increment(1)
@@ -270,17 +261,6 @@ def test_submit_answer_question_not_found(monkeypatch):
         "detail": "Question not found"
     }
 
-
-def test_answer_request_missing_email():
-    payload = answer_response()
-    del payload["email"]
-
-    response = client.post(
-        "/questions/check_answer",
-        json=payload,
-    )
-
-    assert response.status_code == 422
 
 def test_answer_request_missing_fields():
     response = client.post(
@@ -446,3 +426,60 @@ def test_get_user_statistics_no_answers(monkeypatch):
         "correct_answers": 0,
         "accuracy_percentage": 0,
     }
+
+def test_create_user_profile(monkeypatch):
+    mock_db = MagicMock()
+
+    user_doc = MagicMock()
+    user_doc.get.return_value.exists = False
+
+    user_collection = MagicMock()
+    user_collection.document.return_value = user_doc
+
+    mock_db.collection.return_value = user_collection
+
+    monkeypatch.setattr(main, "db", mock_db)
+
+    payload = {
+        "user_id": "user_123",
+        "email": "bob@example.com",
+        "name": "Bob"
+    }
+
+    response = client.post("/users/create", json=payload)
+
+    assert response.status_code == 200
+    assert response.json() == {"msg": "User profile added"}
+
+def test_create_user_profile_update_existing(monkeypatch):
+    mock_db = MagicMock()
+
+    user_doc = MagicMock()
+    user_doc.get.return_value.exists = True
+
+    user_collection = MagicMock()
+    user_collection.document.return_value = user_doc
+
+    mock_db.collection.return_value = user_collection
+
+    monkeypatch.setattr(main, "db", mock_db)
+
+    payload = {
+        "user_id": "user_123",
+        "email": "bob@example.com",
+        "name": "Bob"
+    }
+
+    response = client.post("/users/create", json=payload)
+
+    assert response.status_code == 200
+    assert response.json() == {"msg": "User profile added"}
+
+def test_create_user_profile_missing_fields():
+    payload = {
+        "user_id": "user_123"
+    }
+
+    response = client.post("/users/create", json=payload)
+
+    assert response.status_code == 422

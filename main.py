@@ -29,10 +29,11 @@ class AnswerRequest(BaseModel):
     time_to_answer_seconds: int = Field( ..., ge=0, description="Time taken to answer the question in seconds." ) 
     hint_used: bool = Field( ..., description="Whether the user used a hint." ) 
     solution_viewed: bool = Field( ..., description="Whether the user viewed the solution." )
-    email: str = Field( ..., description="The email of the user." )
-    first_name: str = Field( ..., description="The first name of the user." )
-    last_name: str = Field( ..., description="The last name of the user." )
-    grade: int = Field( ..., ge=1, le=12, description="The grade of the user." )
+
+class UserProfile(BaseModel):
+    user_id: str = Field( ..., description="The ID of the user." ) 
+    email: str = Field( ..., description="The email of the user." ) 
+    name: str = Field( ..., description="The first name of the user." )
 
 @app.get("/questions/{user_id}")
 def get_question(user_id: str):
@@ -70,23 +71,15 @@ def submit_answer(request: AnswerRequest):
     reference = db.collection("userData").document(str(request.user_id)).collection("summary").document("1")
     if not reference.get().exists:
         reference.set({
-            "email": request.email,
             "problems_attempted": 0,
             "problems_correct": 0,
-            "streak": 0,
-            "first_name": request.first_name,
-            "last_name": request.last_name,
-            "grade": request.grade
+            "streak": 0
         })
     else:
         reference.update({
-            "email": request.email,
             "problems_attempted": firestore.Increment(1),
             "problems_correct": (firestore.Increment(1) if correct else firestore.Increment(0)),
-            "streak": (firestore.Increment(1) if correct else 0),
-            "first_name": request.first_name,
-            "last_name": request.last_name,
-            "grade": request.grade
+            "streak": (firestore.Increment(1) if correct else 0)
         })
 
     return {
@@ -128,3 +121,24 @@ def get_answer(question_id: int):
 @app.get("/test/{id}")
 def test(id: int):
     return {"id": id, "msg": "Test passed"}
+
+@app.post("/users/create")
+def create_user(user: UserProfile):
+    user_id = user.user_id
+
+    reference = db.collection("userData").document(str(user_id)).collection("profile").document("1")
+
+    if not reference.get().exists:
+        reference.set({
+            "email": user.email,
+            "name": user.name,
+            "user_id": user.user_id
+        })
+    else:
+        reference.update({
+            "email": user.email,
+            "name": user.name,
+            "user_id": user.user_id
+        })
+
+    return {"msg": "User profile added"}
