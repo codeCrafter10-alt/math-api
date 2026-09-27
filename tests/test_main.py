@@ -27,9 +27,8 @@ def mockQuestion(
     }
 
 # test endpoint
-@pytest.mark.parametrize("id", [1, 2, 3])
-def test_test(id: int):
-    response = client.get(f"/test/{id}")
+def test_test():
+    response = client.head("/test")
     assert response.status_code == 200
 
 

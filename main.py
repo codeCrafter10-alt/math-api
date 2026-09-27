@@ -1,6 +1,6 @@
 import random
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timezone
@@ -118,9 +118,9 @@ def get_answer(question_id: int):
         "solution": question["solution"],
     }
 
-@app.get("/test/{id}")
-def test(id: int):
-    return {"id": id, "msg": "Test passed"}
+@app.head("/test")
+def test():
+    return Response(status_code=200)
 
 @app.post("/users/create")
 def create_user(user: UserProfile):
