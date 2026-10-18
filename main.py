@@ -37,8 +37,31 @@ class UserProfile(BaseModel):
 
 @app.get("/questions/{user_id}")
 def get_question(user_id: str):
+    state_ref = db.collection("userData").document(str(user_id)).collection("state").document(str(1))
+    state = state_ref.get().to_dict() or {}
+    if state.get("question_id") is not None and not state.get("is_answered", True):
+        reference = db.collection("userData").document(str(user_id)).collection("data").document()
+        reference.set({
+            "answer": "",
+            "question": db.collection("questions").document(str(state.get("question_id"))),
+            "answered_correctly": False,
+            "answered_at": datetime.now(timezone.utc),
+            "time_to_answer_seconds": 0,
+            "hint_used": False,
+            "solution_viewed": False,
+            "question_id": state.get("question_id"),
+            "user_id": user_id,
+            "skipped": True
+        })
+
     question_id = random.randint(1, 5000)
     question = db.collection("questions").document(str(question_id)).get().to_dict()
+
+    
+    state_ref.set({
+        "question_id": question_id,
+        "is_answered": False
+    })
 
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
@@ -63,10 +86,20 @@ def submit_answer(request: AnswerRequest):
     data.update({
         "question": db.collection("questions").document(str(request.question_id)),
         "answered_correctly": correct,
-        "answered_at": datetime.now(timezone.utc)
+        "answered_at": datetime.now(timezone.utc),
     })
     reference = db.collection("userData").document(str(request.user_id)).collection("data").document()
     reference.set(data)
+
+    state_ref = db.collection("userData").document(str(request.user_id)).collection("state").document(str(1))
+    if not state_ref.get().exists:
+        state_ref.set({
+            "question_id": request.question_id,
+            "is_answered": True
+        })
+    state_ref.update({
+        "is_answered": True
+    })
 
     reference = db.collection("userData").document(str(request.user_id)).collection("summary").document("1")
     if not reference.get().exists:
@@ -75,12 +108,11 @@ def submit_answer(request: AnswerRequest):
             "problems_correct": 0,
             "streak": 0
         })
-    else:
-        reference.update({
-            "problems_attempted": firestore.Increment(1),
-            "problems_correct": (firestore.Increment(1) if correct else firestore.Increment(0)),
-            "streak": (firestore.Increment(1) if correct else 0)
-        })
+    reference.update({
+        "problems_attempted": firestore.Increment(1),
+        "problems_correct": (firestore.Increment(1) if correct else firestore.Increment(0)),
+        "streak": (firestore.Increment(1) if correct else 0)
+    })
 
     return {
         "correct": correct
@@ -88,22 +120,18 @@ def submit_answer(request: AnswerRequest):
 
 @app.get("/users/{user_id}/summary")
 def get_user_statistics(user_id: str):
-    reference = db.collection("userData").document(str(user_id)).collection("data")
-    user_data = reference.stream()
+    reference = db.collection("userData").document(str(user_id)).collection("summary").document("1")
+    summary = reference.get().to_dict() or {}
 
-    total_questions = 0
-    correct_answers = 0
-
-    for doc in user_data:
-        total_questions += 1
-        if doc.to_dict().get("answered_correctly"):
-            correct_answers += 1
+    total_questions = summary.get("problems_attempted", 0)
+    correct_answers = summary.get("problems_correct", 0)
 
     return {
         "user_id": user_id,
         "total_questions_answered": total_questions,
         "correct_answers": correct_answers,
-        "accuracy_percentage": (correct_answers / total_questions * 100) if total_questions > 0 else 0
+        "accuracy_percentage":round((correct_answers / total_questions * 100) if total_questions > 0 else 0, 2),
+        "streak": summary.get("streak", 0)
     }
 
 @app.get("/questions/{question_id}/answer")

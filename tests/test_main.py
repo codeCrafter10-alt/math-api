@@ -37,10 +37,28 @@ def test_test():
 def test_get_question_success(monkeypatch):
     mock_db = MagicMock()
 
-    mock_doc = MagicMock()
-    mock_doc.get.return_value.to_dict.return_value = mockQuestion()
+    state_doc = MagicMock()
+    state_doc.get.return_value.to_dict.return_value = {"is_answered": False}
 
-    mock_db.collection.return_value.document.return_value = mock_doc
+    question_doc = MagicMock()
+    question_doc.get.return_value.to_dict.return_value = mockQuestion()
+
+    state_collection = MagicMock()
+    state_collection.document.return_value = state_doc
+
+    questions_collection = MagicMock()
+    questions_collection.document.return_value = question_doc
+
+    user_document = MagicMock()
+    user_document.collection.return_value = state_collection
+
+    user_data_collection = MagicMock()
+    user_data_collection.document.return_value = user_document
+
+    mock_db.collection.side_effect = lambda name: {
+        "userData": user_data_collection,
+        "questions": questions_collection,
+    }[name]
 
     monkeypatch.setattr(main, "db", mock_db)
 
@@ -55,17 +73,81 @@ def test_get_question_success(monkeypatch):
         "topic": "Prealgebra",
     }
 
-    mock_db.collection.assert_called_with("questions")
-    mock_db.collection.return_value.document.assert_called_with("1")
+    questions_collection.document.assert_called_once_with("1")
+    state_doc.set.assert_called_once_with({
+        "question_id": 1,
+        "is_answered": False,
+    })
+
+
+def test_get_question_with_missing_state_document(monkeypatch):
+    mock_db = MagicMock()
+
+    state_doc = MagicMock()
+    state_doc.get.return_value.to_dict.return_value = None
+
+    question_doc = MagicMock()
+    question_doc.get.return_value.to_dict.return_value = mockQuestion()
+
+    state_collection = MagicMock()
+    state_collection.document.return_value = state_doc
+
+    questions_collection = MagicMock()
+    questions_collection.document.return_value = question_doc
+
+    user_document = MagicMock()
+    user_document.collection.return_value = state_collection
+
+    user_data_collection = MagicMock()
+    user_data_collection.document.return_value = user_document
+
+    mock_db.collection.side_effect = lambda name: {
+        "userData": user_data_collection,
+        "questions": questions_collection,
+    }[name]
+
+    monkeypatch.setattr(main, "db", mock_db)
+    monkeypatch.setattr(main.random, "randint", lambda a, b: 1)
+
+    response = client.get("/questions/user_123")
+
+    assert response.status_code == 200
+    assert response.json()["id"] == 1
+    state_doc.set.assert_called_once_with({
+        "question_id": 1,
+        "is_answered": False,
+    })
 
 
 def test_get_question_not_found(monkeypatch):
     mock_db = MagicMock()
 
-    mock_doc = MagicMock()
-    mock_doc.get.return_value.to_dict.return_value = None
+    state_doc = MagicMock()
+    state_doc.get.return_value.to_dict.return_value = {"is_answered": False}
 
-    mock_db.collection.return_value.document.return_value = mock_doc
+    question_doc = MagicMock()
+    question_doc.get.return_value.to_dict.return_value = None
+
+    state_collection = MagicMock()
+    state_collection.document.return_value = state_doc
+
+    questions_collection = MagicMock()
+    questions_collection.document.return_value = question_doc
+
+    user_document = MagicMock()
+    user_document.collection.return_value = state_collection
+
+    user_data_collection = MagicMock()
+    user_data_collection.document.return_value = user_document
+
+    def collection_side_effect(name):
+        if name == "userData":
+            return user_data_collection
+        if name == "questions":
+            return questions_collection
+        return MagicMock()
+
+    mock_db.collection.side_effect = collection_side_effect
 
     monkeypatch.setattr(main, "db", mock_db)
 
@@ -78,7 +160,64 @@ def test_get_question_not_found(monkeypatch):
         "detail": "Question not found"
     }
 
-    mock_db.collection.return_value.document.assert_called_once_with("5")
+    questions_collection.document.assert_called_once_with("5")
+    state_doc.set.assert_called_once_with({
+        "question_id": 5,
+        "is_answered": False,
+    })
+
+
+def test_get_question_records_skipped_question(monkeypatch):
+    mock_db = MagicMock()
+
+    state_doc = MagicMock()
+    state_doc.get.return_value.to_dict.return_value = {
+        "is_answered": False,
+        "question_id": 7,
+    }
+
+    skipped_doc = MagicMock()
+    question_doc = MagicMock()
+    question_doc.get.return_value.to_dict.return_value = mockQuestion(question_id=8)
+
+    state_collection = MagicMock()
+    state_collection.document.return_value = state_doc
+
+    data_collection = MagicMock()
+    data_collection.document.return_value = skipped_doc
+
+    user_document = MagicMock()
+    user_document.collection.side_effect = lambda name: {
+        "state": state_collection,
+        "data": data_collection,
+    }[name]
+
+    user_data_collection = MagicMock()
+    user_data_collection.document.return_value = user_document
+
+    questions_collection = MagicMock()
+    questions_collection.document.return_value = question_doc
+
+    mock_db.collection.side_effect = lambda name: {
+        "userData": user_data_collection,
+        "questions": questions_collection,
+    }[name]
+
+    monkeypatch.setattr(main, "db", mock_db)
+    monkeypatch.setattr(main.random, "randint", lambda a, b: 8)
+
+    response = client.get("/questions/user_123")
+
+    assert response.status_code == 200
+    skipped_data = skipped_doc.set.call_args.args[0]
+    assert skipped_data["question_id"] == 7
+    assert skipped_data["user_id"] == "user_123"
+    assert skipped_data["skipped"] is True
+    assert skipped_data["answer"] == ""
+    state_doc.set.assert_called_once_with({
+        "question_id": 8,
+        "is_answered": False,
+    })
 
 
 
@@ -113,12 +252,18 @@ def test_submit_answer_correct(monkeypatch):
     summary_collection = MagicMock()
     summary_collection.document.return_value = summary_doc
 
+    state_doc = MagicMock()
+    state_collection = MagicMock()
+    state_collection.document.return_value = state_doc
+
     user_document = MagicMock()
     def user_collection_side_effect(name):
         if name == "data":
             return data_collection
         elif name == "summary":
             return summary_collection
+        elif name == "state":
+            return state_collection
 
         return MagicMock()
     user_document.collection.side_effect = user_collection_side_effect
@@ -172,6 +317,8 @@ def test_submit_answer_correct(monkeypatch):
     summary_doc.update.assert_called_once_with(
         summary_data
     )
+    state_collection.document.assert_called_once_with("1")
+    state_doc.update.assert_called_once_with({"is_answered": True})
     
 
 def test_submit_answer_incorrect(monkeypatch):
@@ -369,18 +516,17 @@ def test_get_answer_invalid_id():
 def test_get_user_statistics_with_answers(monkeypatch):
     mock_db = MagicMock()
 
-    docs = [
-        MagicMock(to_dict=lambda: {"answered_correctly": True}),
-        MagicMock(to_dict=lambda: {"answered_correctly": True}),
-        MagicMock(to_dict=lambda: {"answered_correctly": False}),
-        MagicMock(to_dict=lambda: {"answered_correctly": False}),
-    ]
-
-    data_collection = MagicMock()
-    data_collection.stream.return_value = docs
+    summary_doc = MagicMock()
+    summary_doc.get.return_value.to_dict.return_value = {
+        "problems_attempted": 4,
+        "problems_correct": 2,
+        "streak": 2,
+    }
 
     user_document = MagicMock()
-    user_document.collection.return_value = data_collection
+    summary_collection = MagicMock()
+    summary_collection.document.return_value = summary_doc
+    user_document.collection.return_value = summary_collection
 
     user_collection = MagicMock()
     user_collection.document.return_value = user_document
@@ -396,18 +542,22 @@ def test_get_user_statistics_with_answers(monkeypatch):
         "user_id": "user_123",
         "total_questions_answered": 4,
         "correct_answers": 2,
-        "accuracy_percentage": 50.0,
+        "accuracy_percentage": 50.00,
+        "streak": 2,
     }
+    summary_collection.document.assert_called_once_with("1")
 
 
 def test_get_user_statistics_no_answers(monkeypatch):
     mock_db = MagicMock()
 
-    data_collection = MagicMock()
-    data_collection.stream.return_value = []
+    summary_doc = MagicMock()
+    summary_doc.get.return_value.to_dict.return_value = {}
 
     user_document = MagicMock()
-    user_document.collection.return_value = data_collection
+    summary_collection = MagicMock()
+    summary_collection.document.return_value = summary_doc
+    user_document.collection.return_value = summary_collection
 
     user_collection = MagicMock()
     user_collection.document.return_value = user_document
@@ -424,7 +574,39 @@ def test_get_user_statistics_no_answers(monkeypatch):
         "total_questions_answered": 0,
         "correct_answers": 0,
         "accuracy_percentage": 0,
+        "streak": 0,
     }
+
+
+def test_get_user_statistics_with_missing_summary_document(monkeypatch):
+    mock_db = MagicMock()
+
+    summary_doc = MagicMock()
+    summary_doc.get.return_value.to_dict.return_value = None
+
+    user_document = MagicMock()
+    summary_collection = MagicMock()
+    summary_collection.document.return_value = summary_doc
+    user_document.collection.return_value = summary_collection
+
+    user_collection = MagicMock()
+    user_collection.document.return_value = user_document
+
+    mock_db.collection.return_value = user_collection
+
+    monkeypatch.setattr(main, "db", mock_db)
+
+    response = client.get("/users/user_123/summary")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "user_id": "user_123",
+        "total_questions_answered": 0,
+        "correct_answers": 0,
+        "accuracy_percentage": 0,
+        "streak": 0,
+    }
+
 
 def test_create_user_profile(monkeypatch):
     mock_db = MagicMock()
