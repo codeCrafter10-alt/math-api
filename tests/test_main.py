@@ -118,6 +118,49 @@ def test_get_question_with_missing_state_document(monkeypatch):
         "is_answered": False,
     })
 
+def test_get_question_with_skip_returns_stored_question(monkeypatch):
+    mock_db = MagicMock()
+
+    state_doc = MagicMock()
+    state_doc.get.return_value.to_dict.return_value = {
+        "question_id": 7,
+        "is_answered": False,
+    }
+
+    question_doc = MagicMock()
+    question_doc.get.return_value.to_dict.return_value = mockQuestion(question_id=7)
+
+    state_collection = MagicMock()
+    state_collection.document.return_value = state_doc
+
+    user_document = MagicMock()
+    user_document.collection.return_value = state_collection
+
+    user_data_collection = MagicMock()
+    user_data_collection.document.return_value = user_document
+
+    questions_collection = MagicMock()
+    questions_collection.document.return_value = question_doc
+
+    mock_db.collection.side_effect = lambda name: {
+        "userData": user_data_collection,
+        "questions": questions_collection,
+    }[name]
+
+    monkeypatch.setattr(main, "db", mock_db)
+
+    response = client.get("/questions/user_123/1")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": 7,
+        "question": "How many whole numbers are greater than 150 and less than 500?",
+        "level": "Level 3",
+        "topic": "Prealgebra",
+    }
+    questions_collection.document.assert_called_once_with("7")
+    state_doc.set.assert_not_called()
+
 
 def test_get_question_not_found(monkeypatch):
     mock_db = MagicMock()

@@ -36,9 +36,22 @@ class UserProfile(BaseModel):
     name: str = Field( ..., description="The first name of the user." )
 
 @app.get("/questions/{user_id}")
-def get_question(user_id: str):
+def get_question(user_id: str, skip: int = 0):
     state_ref = db.collection("userData").document(str(user_id)).collection("state").document(str(1))
     state = state_ref.get().to_dict() or {}
+
+    if skip == 1:
+        if state.get("question_id") is not None:
+            question_id = state.get("question_id")
+            question = db.collection("questions").document(str(question_id)).get().to_dict()
+            if not question:
+                raise HTTPException(status_code=404, detail="Question not found")
+            return {
+                "id": question["id"],
+                "question": question["question"],
+                "level": question["level"],
+                "topic": question["topic"]
+            }
     if state.get("question_id") is not None and not state.get("is_answered", True):
         reference = db.collection("userData").document(str(user_id)).collection("data").document()
         reference.set({
@@ -145,6 +158,10 @@ def get_answer(question_id: int):
         "answer": question["answer"],
         "solution": question["solution"],
     }
+
+@app.get("/questions/{user_id}/{skip}")
+def get_question_with_skip(user_id: str, skip: int):
+    return get_question(user_id, skip)
 
 @app.head("/test")
 def test():
